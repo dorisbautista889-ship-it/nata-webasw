@@ -1,0 +1,192 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consecionario</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background-color: #ffffff; margin: 0; padding: 0; color: #000000; }
+        header { background-color: #000000; color: white; padding: 30px; text-align: center; border-bottom: 1px solid #222; }
+        header h1 { margin: 0; font-size: 2.2rem; font-weight: 700; letter-spacing: 1px; }
+        header p { margin: 5px 0 0; color: #ccc; font-size: 1.1rem; }
+        .container { max-width: 900px; margin: 30px auto; padding: 0 20px; }
+        .user-info { text-align: right; margin-bottom: 30px; color: #666; font-size: 0.95rem; }
+        .user-info a { color: #e74c3c; text-decoration: none; font-weight: bold; margin-left: 5px; cursor: pointer; }
+        .user-info a:hover { text-decoration: underline; }
+        
+        h2 { font-size: 1.8rem; margin-bottom: 20px; font-weight: 600; color: #000; text-align: center; }
+        
+        .menu-section { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; justify-content: center; }
+        .card { 
+            background: rgba(0, 0, 0, 0.04); 
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 25px; 
+            border-radius: 12px; 
+            flex: 1; 
+            min-width: 250px; 
+            max-width: 400px;
+            text-align: center;
+        }
+        .card h3 { color: #000; margin-top: 0; font-size: 1.4rem; }
+        .card p { color: #444; line-height: 1.6; font-size: 0.95rem; }
+        
+        .btn { display: inline-block; padding: 12px 30px; background-color: #000000; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; transition: background-color 0.3s ease; cursor: pointer; border: none; }
+        .btn:hover { background-color: #333333; }
+        .btn-login { background-color: #174ea6; margin-top: 20px; }
+        .btn-login:hover { background-color: #103b7c; }
+
+        .admin-section { text-align: center; margin-top: 50px; border-top: 1px solid #eee; padding-top: 30px; }
+        .alerta-exito { margin-top: 25px; padding: 15px; background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; border-radius: 6px; text-align: center; font-weight: bold; display: none; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Consecionario</h1>
+        <p>Explora nuestro inventario</p>
+    </header>
+    
+    <div class="container">
+        
+        <!-- PANTALLA 1: CUANDO NO HAY SESIÓN (Se muestra por defecto) -->
+        <div id="pantalla-login" style="text-align: center; margin-top: 60px;">
+            <h2>Bienvenido</h2>
+            <p style="color: #555;">Regístrate o inicia sesión para acceder al catálogo.</p>
+            <a id="btn-iniciar-sesion" href="#" class="btn btn-login">Iniciar sesión</a>
+            <br><br>
+            <a id="btn-registro" href="#" style="color: #174ea6; text-decoration: none; font-size: 0.9rem;">No tengo cuenta, registrarme</a>
+        </div>
+
+        <!-- PANTALLA 2: EL CATÁLOGO (Oculto hasta que inicias sesión) -->
+        <div id="pantalla-app" style="display: none;">
+            <div class="user-info">
+                <span id="saludo-usuario">Autenticado de forma segura</span> | <a onclick="cerrarSesion()">Cerrar sesión</a>
+            </div>
+
+            <h2>Autos</h2>
+            <div class="menu-section">
+                <div class="card">
+                    <h3>Modelos</h3>
+                    <p>Espacio, confort y seguridad superior para todos tus viajes.</p>
+                </div>
+                <div class="card">
+                    <h3>Años</h3>
+                    <p>2026 y demas.</p>
+                </div>
+            </div>
+
+            <div class="admin-section">
+                <button onclick="llamarLambda()" class="btn">Consultar Inventario en AWS</button>
+            </div>
+
+            <div class="alerta-exito" id="mensaje-aws"></div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. CONFIGURACIÓN DE AWS COGNITO (TUS DATOS) ---
+        const dominio = "https://us-east-2lvkkh9m8z.auth.us-east-2.amazoncognito.com";
+        const clientId = "3u8qks5km0cnrvpm8ap8qpv0op";
+        const redirectUri = "http://127.0.0.1:5500/index.html";
+
+        function crearUrl(tipo) {
+            const url = new URL(dominio + "/" + tipo);
+            url.searchParams.set("client_id", clientId);
+            url.searchParams.set("response_type", "token"); 
+            url.searchParams.set("scope", "openid email phone");
+            url.searchParams.set("redirect_uri", redirectUri);
+            return url.toString();
+        }
+
+        document.getElementById("btn-iniciar-sesion").href = crearUrl("login");
+        document.getElementById("btn-registro").href = crearUrl("signup");
+
+        // --- FUNCIÓN PARA LEER EL TOKEN ---
+        function decodificarToken(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (error) {
+                return null;
+            }
+        }
+
+        // --- 2. LÓGICA DE LA APLICACIÓN SERVERLESS ---
+        window.onload = function() {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            const accessToken = params.get("access_token");
+            const idToken = params.get("id_token"); // El id_token contiene el perfil del usuario
+
+            if (accessToken) {
+                localStorage.setItem("aws_token", accessToken);
+                if (idToken) localStorage.setItem("aws_id_token", idToken);
+                window.location.hash = ""; 
+            }
+
+            const tokenGuardado = localStorage.getItem("aws_token");
+            if (tokenGuardado) {
+                document.getElementById("pantalla-login").style.display = "none";
+                document.getElementById("pantalla-app").style.display = "block";
+
+                // Extraer y mostrar el nombre
+                const tokenPerfil = localStorage.getItem("aws_id_token") || tokenGuardado;
+                const datosUsuario = decodificarToken(tokenPerfil);
+                
+                if (datosUsuario) {
+                    const nombre = datosUsuario.name || datosUsuario.email || datosUsuario['cognito:username'] || 'Usuario';
+                    document.getElementById('saludo-usuario').innerText = 'Hola, ' + nombre;
+                }
+            }
+        };
+
+        // --- 3. CONEXIÓN CON AWS API GATEWAY Y LAMBDA ---
+        async function llamarLambda() {
+            const token = localStorage.getItem("aws_token");
+            const mensajeDiv = document.getElementById("mensaje-aws");
+            
+            const urlApi = "https://2r8nyabfg9.execute-api.us-east-2.amazonaws.com/prod/api-nata-web";
+
+            try {
+                mensajeDiv.innerText = "Consultando base de datos en AWS...";
+                mensajeDiv.style.backgroundColor = "#e2e3e5";
+                mensajeDiv.style.color = "#383d41";
+                mensajeDiv.style.display = "block";
+
+                const respuesta = await fetch(urlApi, {
+                    method: "GET",
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+
+                if (respuesta.ok) {
+                    const datos = await respuesta.json();
+                    mensajeDiv.innerText = "Respuesta de Lambda: " + JSON.stringify(datos); 
+                    mensajeDiv.style.backgroundColor = "#d4edda";
+                    mensajeDiv.style.color = "#155724";
+                } else {
+                    mensajeDiv.innerText = "Error: Acceso denegado. Es posible que el token haya expirado o CORS no esté configurado en AWS.";
+                    mensajeDiv.style.backgroundColor = "#f8d7da";
+                    mensajeDiv.style.color = "#721c24";
+                }
+            } catch (error) {
+                console.error("EL ERROR INTERNO ES:", error);
+                mensajeDiv.innerText = "Falla de red: No se pudo contactar al API Gateway.";
+                mensajeDiv.style.backgroundColor = "#f8d7da";
+                mensajeDiv.style.color = "#721c24";
+            }
+        }
+
+        // --- 4. CERRAR SESIÓN ---
+        function cerrarSesion() {
+            localStorage.removeItem("aws_token");
+            localStorage.removeItem("aws_id_token");
+            location.reload();
+        }
+    </script>
+</body>
+</html>
